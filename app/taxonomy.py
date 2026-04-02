@@ -6,7 +6,6 @@ Severity: 1–10 environmental impact scale (10 = most harmful if landfilled)
 """
 
 from dataclasses import dataclass
-from typing import Literal
 
 @dataclass
 class WasteCategory:
@@ -39,6 +38,12 @@ INDICWASTE: dict[str, WasteCategory] = {
     "W14": WasteCategory(14, "W14", "Sanitary / Hygiene",             False, "RDF",      680.0,   8, 0,     500,   0.5,  "Diapers, sanitary pads, wipes"),
     "W15": WasteCategory(15, "W15", "Inert / Ash / Soil",             False, "INERT",    90.0,    2, 0,     300,   0.1,  "Ash, dirt, ceramic, stone"),
     "W16": WasteCategory(16, "W16", "Mixed / Unclassified",           False, "RDF",      420.0,   5, 0,     1000,  0.4,  "Multi-material, unsorted waste"),
+}
+
+TOKEN_INR_RATES: dict[str, float] = {
+    "W01": 0.5,  "W02": 8.0,  "W03": 5.0,  "W04": 12.0, "W05": 50.0,
+    "W06": 3.0,  "W07": 1.5,  "W08": 20.0, "W09": 0.0,  "W10": 4.0,
+    "W11": 5.0,  "W12": 0.8,  "W13": 0.0,  "W14": 1.0,  "W15": 0.2,  "W16": 1.5,
 }
 
 CATEGORY_CODES = list(INDICWASTE.keys())

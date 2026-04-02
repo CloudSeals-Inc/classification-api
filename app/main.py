@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from PIL import Image
 
-from .taxonomy import INDICWASTE, get_by_code
+from .taxonomy import INDICWASTE, get_by_code, TOKEN_INR_RATES
 from .model import ClassificationModel
 from .schemas import ClassificationResult, DetectionBox, VolumeEstimate
 
@@ -79,6 +79,17 @@ def _enrich(detections: list[dict], classifications: list[dict],
         weight  = density * vol_m3
         co2e    = round(weight * cat.co2e_avoided_per_tonne / 1000, 4)
         name = det.get("category_name") or cat.name
+
+        # INR value streams (v1.3)
+        scrap_min = round(weight * cat.inr_per_tonne_min / 1000, 2)
+        scrap_max = round(weight * cat.inr_per_tonne_max / 1000, 2)
+        inr_rate  = TOKEN_INR_RATES.get(cat.code, 1.5)
+        sev_mult  = 1.0 + (cat.severity_score - 1) * 0.15
+        co2_mult  = 1.0 + min(co2e * 0.02, 0.5)
+        token_inr = round(cat.token_base_rate * weight * sev_mult * co2_mult * inr_rate, 2)
+        carbon_inr = round(co2e * 2.0, 2)  # ₹2000/tonne = ₹2/kg
+        total_inr  = round((scrap_min + scrap_max) / 2 + token_inr + carbon_inr, 2)
+
         boxes.append(DetectionBox(
             category_code=cat.code,
             category_name=name,
@@ -89,6 +100,11 @@ def _enrich(detections: list[dict], classifications: list[dict],
             weight_kg_estimate=weight,
             co2e_avoided_kg=co2e,
             bbox_xyxy=det.get("bbox", [0, 0, 0, 0]),
+            scrap_value_inr_min=scrap_min,
+            scrap_value_inr_max=scrap_max,
+            token_value_inr=token_inr,
+            carbon_credit_inr=carbon_inr,
+            total_value_inr_estimate=total_inr,
         ))
     logger.info("Enrich: %d detections → %d boxes (dropped %d)",
                 len(detections), len(boxes), len(detections) - len(boxes))
@@ -137,8 +153,13 @@ async def classify_waste(
             0.6 if b.category_code == "W16" else 1.0)
     dominant = max(boxes, key=_score) if boxes else None
 
-    total_weight = round(sum(b.weight_kg_estimate for b in boxes), 3)
-    total_co2e   = round(sum(b.co2e_avoided_kg   for b in boxes), 4)
+    total_weight    = round(sum(b.weight_kg_estimate for b in boxes), 3)
+    total_co2e      = round(sum(b.co2e_avoided_kg   for b in boxes), 4)
+    total_scrap_min = round(sum(b.scrap_value_inr_min for b in boxes), 2)
+    total_scrap_max = round(sum(b.scrap_value_inr_max for b in boxes), 2)
+    total_token_inr = round(sum(b.token_value_inr     for b in boxes), 2)
+    total_carbon_inr= round(sum(b.carbon_credit_inr   for b in boxes), 2)
+    grand_total_inr = round((total_scrap_min + total_scrap_max) / 2 + total_token_inr + total_carbon_inr, 2)
     # 3. No grouping - show all individual detections for high-density visibility
     for det in boxes:
         det.count = 1
@@ -168,6 +189,11 @@ async def classify_waste(
             sum(1 for b in boxes if b.recyclable) / max(len(boxes), 1), 2),
         volume_estimate=volume_est,
         ai_narrative=ai_narrative,
+        total_scrap_value_inr_min=total_scrap_min,
+        total_scrap_value_inr_max=total_scrap_max,
+        total_token_value_inr=total_token_inr,
+        total_carbon_credit_inr=total_carbon_inr,
+        grand_total_value_inr=grand_total_inr,
     )
 
 
