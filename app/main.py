@@ -81,14 +81,15 @@ def _enrich(detections: list[dict], classifications: list[dict],
         name = det.get("category_name") or cat.name
 
         # INR value streams (v1.3)
-        scrap_min = round(weight * cat.inr_per_tonne_min / 1000, 2)
-        scrap_max = round(weight * cat.inr_per_tonne_max / 1000, 2)
-        inr_rate  = TOKEN_INR_RATES.get(cat.code, 1.5)
-        sev_mult  = 1.0 + (cat.severity_score - 1) * 0.15
-        co2_mult  = 1.0 + min(co2e * 0.02, 0.5)
-        token_inr = round(cat.token_base_rate * weight * sev_mult * co2_mult * inr_rate, 2)
-        carbon_inr = round(co2e * 2.0, 2)  # ₹2000/tonne = ₹2/kg
-        total_inr  = round((scrap_min + scrap_max) / 2 + token_inr + carbon_inr, 2)
+        # scrap: conservative min-rate estimate
+        # token: weight × TOKEN_INR_RATE × 0.5 (citizen-facing token allocation)
+        # carbon: ₹1/kg fixed simple estimate
+        scrap_min  = round(weight * cat.inr_per_tonne_min / 1000, 2)
+        scrap_max  = round(weight * cat.inr_per_tonne_max / 1000, 2)
+        inr_rate   = TOKEN_INR_RATES.get(cat.code, 1.5)
+        token_inr  = round(weight * inr_rate * 0.5, 2)
+        carbon_inr = round(weight * 1.0, 2)
+        total_inr  = round(scrap_min + token_inr + carbon_inr, 2)
 
         boxes.append(DetectionBox(
             category_code=cat.code,
