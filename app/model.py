@@ -112,8 +112,7 @@ class ClassificationModel:
             
             aiplatform.init(project=project, location=location)
             
-            # Use us-central1 for Gemini as it's the most compatible for model garden
-            vertexai.init(project=project, location="us-central1")
+            vertexai.init(project=project, location=location)
             
             # Gemini 1.5 Flash is more widely available in GCP projects
             self._gemini = GenerativeModel("gemini-1.5-flash")
