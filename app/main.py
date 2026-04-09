@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MIBA Classification API", version="1.2.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*", "https://miba-ui-460918627115.europe-west1.run.app"],
+app.add_middleware(CORSMiddleware, allow_origins=["*", "https://miba-ui-340635219170.europe-west1.run.app"],
                   allow_methods=["*"], allow_headers=["*"])
 
 _model: Optional[ClassificationModel] = None
