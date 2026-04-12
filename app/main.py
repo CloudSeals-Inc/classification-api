@@ -1,6 +1,7 @@
 """
 MIBA — Classification API v1.2
 Added: /classify/debug endpoint, explicit error logging in enrichment loop
+
 """
 
 import os, io, base64, hashlib, logging
