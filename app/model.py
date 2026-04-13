@@ -6,10 +6,9 @@ Clean rewrite — no silent failures, all errors logged explicitly.
 import os, io, base64, logging, random, json, re
 
 from google.cloud import aiplatform, vision
-import vertexai
-from vertexai.generative_models import GenerativeModel, Part
 from PIL import Image
 import numpy as np
+import google.generativeai as genai
 
 from .schemas import VolumeEstimate
 
@@ -111,18 +110,24 @@ class ClassificationModel:
             location = os.getenv("GOOGLE_REGION", "europe-west1")
             
             aiplatform.init(project=project, location=location)
-            
-            vertexai.init(project=project, location=location)
-            
-            # Gemini 1.5 Flash is more widely available in GCP projects
-            self._gemini = GenerativeModel("gemini-1.5-flash")
-            
-            # Vertex AI Endpoint (Optional, uses primary location)
+
+            # Use google-generativeai SDK (API key) instead of Vertex AI
+            # miba-uat project has no Vertex AI publisher access
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if api_key:
+                genai.configure(api_key=api_key)
+                self._gemini = genai.GenerativeModel("gemini-2.5-flash")
+                logger.info("Gemini initialized via API key (google-generativeai SDK).")
+            else:
+                logger.warning("GEMINI_API_KEY not set — Gemini unavailable.")
+                self._gemini = None
+
+            # Vertex AI Endpoint (Optional)
             if self.vertex_endpoint_id:
                 self._endpoint = aiplatform.Endpoint(self.vertex_endpoint_id)
-                logger.info("Vertex AI Endpoint (at %s) & Gemini (at europe-west1) initialized.", location)
+                logger.info("Vertex AI Endpoint initialized.")
             else:
-                logger.info("Gemini initialized at europe-west1 (Narrative mode).")
+                logger.info("No Vertex AI endpoint configured.")
         except Exception as e:
             logger.error("AI platform init failed: %s", e)
             self._gemini = None
@@ -464,17 +469,15 @@ class ClassificationModel:
                 "- Only include items you can actually see. Do not invent items."
             )
 
-            models_to_try = ["gemini-2.0-flash-001", "gemini-2.0-flash", "gemini-2.0-flash-lite-001"]
             raw_text = None
-            for m_name in models_to_try:
+            if self._gemini:
                 try:
-                    m = GenerativeModel(m_name)
-                    response = m.generate_content([Part.from_data(img_bytes, mime_type="image/jpeg"), prompt])
+                    img_part = {"mime_type": "image/jpeg", "data": img_bytes}
+                    response = self._gemini.generate_content([prompt, img_part])
                     if response.text:
                         raw_text = response.text.strip()
-                        break
                 except Exception as ex:
-                    logger.warning("Gemini structured detect model %s failed: %s", m_name, ex)
+                    logger.warning("Gemini structured detect failed: %s", ex)
 
             if not raw_text:
                 return []
@@ -560,16 +563,14 @@ class ClassificationModel:
                     "Include an estimate of the item counts and an approximate total weight range (e.g. 150-250kg)."
                 )
                 
-                # Try multiple models to avoid project-specific 404s
-                for m_name in ["gemini-1.5-flash", "gemini-1.5-pro"]:
+                if self._gemini:
                     try:
-                        m = GenerativeModel(m_name)
-                        response = m.generate_content([Part.from_data(img_bytes, mime_type="image/jpeg"), prompt])
+                        img_part = {"mime_type": "image/jpeg", "data": img_bytes}
+                        response = self._gemini.generate_content([prompt, img_part])
                         if response.text:
                             narrative_text = response.text
-                            break
                     except Exception as model_err:
-                        logger.warning("Gemini %s failed: %s", m_name, model_err)
+                        logger.warning("Gemini narrative failed: %s", model_err)
             except Exception as e:
                 logger.error("Gemini narrative block failed: %s", e)
         
